@@ -200,6 +200,7 @@ def normalize_xero_purchase_document(
             vat = -abs(vat)
             gross = -abs(gross)
         yield TransactionLine(
+            source_system="xero",
             tenant_id=tenant_id,
             organisation_name=organisation_name,
             transaction_type=document_type,

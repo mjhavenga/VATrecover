@@ -10,6 +10,8 @@ Python application for an accounting practice to run a read-only VAT input-tax r
 - Normalizes Xero lines into a stable `TransactionLine` model.
 - Defaults to a five-year review window and scrutinises every normalized purchase-side line in that window.
 - Profiles each client's own account/supplier history instead of hardcoding account codes or supplier names. For a five-year full review, the extracted review corpus is also used as the behavioural baseline; optionally pass `--history-from` to add earlier profile history.
+- Imports Sage Pastel/Sage 50 purchase exports in CSV/XLSX form and runs the same VAT review engine.
+- Provides a Render-ready ERP-style web workbench for Xero, Sage Accounting, and Pastel import workflows.
 - Flags potential under-claimed input VAT as review items only.
 - Suppresses configured blocked input VAT, non-VAT suppliers, exempt/zero-rated accounts, and apportionment accounts.
 - Writes an Excel working paper and a client-facing Markdown summary.
@@ -32,6 +34,25 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 ```
+
+## Render deploy
+
+This repository includes `render.yaml` so Render deploys it as a Python service instead of guessing another runtime.
+
+- Build command: `pip install -r requirements.txt`
+- Start command: `gunicorn vat_input_review.web:app --bind 0.0.0.0:$PORT`
+- Health check: `/health`
+
+The Render web service opens a clean ERP-style review workbench with Xero, Sage Accounting, and Pastel source-system controls. VAT reviews are still executed through the backend/CLI workflow until credentials, storage, and user access controls are configured for production.
+
+## Sage Accounting integration
+
+The `vat_input_review.sage` module adds the connector structure for Sage Business Cloud Accounting:
+
+- OAuth 2.0 authorization and token refresh.
+- Business selection through Sage's business identifier.
+- Read-only extraction skeleton for contacts, ledger accounts, purchase invoices, and purchase credit notes.
+- Normalization into the same `TransactionLine` model used by Xero and Pastel.
 
 ## Run tests
 
@@ -86,3 +107,13 @@ python -m vat_input_review.cli run-fixture --config examples/org_config.json --h
 ```
 
 No rule-engine tests call the live Xero API.
+
+## Sage Pastel / Sage 50 file workflow
+
+Export the Pastel purchase transaction review data to CSV or XLSX with columns such as date, supplier, VAT number, GL account, tax/VAT code, net amount, VAT amount, gross amount, and document reference. Then run:
+
+```powershell
+python -m vat_input_review.cli run-pastel --config examples/org_config.json --pastel-file examples\pastel_purchase_export.csv --output-dir outputs
+```
+
+Native Pastel database or backup files are intentionally not parsed directly yet; export to CSV/XLSX first so the review remains transparent and defensible.

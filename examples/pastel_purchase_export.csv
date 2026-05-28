@@ -1,0 +1,3 @@
+Date,Supplier Code,Supplier,VAT Number,GL Code,GL Account,Tax Code,Description,Net Amount,VAT Amount,Gross Amount,Reference
+2026-01-15,SUP001,VAT Vendor,4123456789,400,Materials,NONE,Potential missed VAT purchase,2000.00,0.00,2000.00,PASTEL-001
+2026-02-10,SUP001,VAT Vendor,4123456789,400,Materials,INPUT,Low VAT amount compared with pattern,1000.00,50.00,1050.00,PASTEL-002

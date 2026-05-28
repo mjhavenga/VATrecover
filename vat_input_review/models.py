@@ -28,7 +28,7 @@ class TransactionLine:
     """A single normalized purchase-side line from Xero.
 
     The rule engine only consumes this model, which keeps client data scoped to
-    one Xero tenant and avoids coupling VAT review logic to raw Xero payloads.
+    one accounting tenant and avoids coupling VAT review logic to raw API payloads.
     """
 
     tenant_id: str
@@ -51,6 +51,7 @@ class TransactionLine:
     vat_amount: Money
     gross_amount: Money
     currency_code: str = "ZAR"
+    source_system: str = "xero"
     source_url: str | None = None
     raw: dict[str, Any] = field(default_factory=dict, compare=False, repr=False)
 

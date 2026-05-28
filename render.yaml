@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: vatrecover
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn vat_input_review.web:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    autoDeploy: true

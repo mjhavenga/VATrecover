@@ -45,6 +45,7 @@ def make_line(
     net_amount = money(net)
     vat_amount = money(vat)
     return TransactionLine(
+        source_system="xero",
         tenant_id=TENANT_ID,
         organisation_name="Fixture Client",
         transaction_type="INVOICE",

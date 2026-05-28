@@ -50,6 +50,7 @@ def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: 
     headers = [
         "Reviewed Y/N",
         "Tenant ID",
+        "Source System",
         "Transaction ID",
         "Line ID",
         "Document No.",
@@ -81,6 +82,7 @@ def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: 
         values = [
             "",
             line.tenant_id,
+            line.source_system,
             line.transaction_id,
             line.line_id,
             line.document_number,
@@ -104,37 +106,38 @@ def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: 
             ws.cell(row=row_idx, column=col, value=value)
 
     total_row = start_row + len(sorted_flags) + 1
-    ws.cell(row=total_row, column=16, value="Total potential recovery").font = Font(bold=True)
-    ws.cell(row=total_row, column=17, value=f"=SUM(Q{start_row + 1}:Q{total_row - 1})").font = Font(bold=True)
+    ws.cell(row=total_row, column=17, value="Total potential recovery").font = Font(bold=True)
+    ws.cell(row=total_row, column=18, value=f"=SUM(R{start_row + 1}:R{total_row - 1})").font = Font(bold=True)
 
-    money_columns = [14, 15, 16, 17]
+    money_columns = [15, 16, 17, 18]
     for col in money_columns:
         for row in range(start_row + 1, total_row + 1):
             ws.cell(row=row, column=col).number_format = '#,##0.00'
     for row in range(start_row + 1, total_row):
-        ws.cell(row=row, column=19).number_format = "0%"
+        ws.cell(row=row, column=20).number_format = "0%"
 
     widths = {
         1: 14,
-        3: 38,
+        3: 14,
         4: 38,
-        5: 18,
-        6: 12,
-        7: 18,
-        8: 28,
-        9: 18,
-        10: 14,
-        11: 24,
-        12: 16,
-        13: 36,
-        17: 20,
-        18: 34,
-        20: 60,
+        5: 38,
+        6: 18,
+        7: 12,
+        8: 18,
+        9: 28,
+        10: 18,
+        11: 14,
+        12: 24,
+        13: 16,
+        14: 36,
+        18: 20,
+        19: 34,
+        21: 60,
     }
     for col in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col)].width = widths.get(col, 16)
     ws.freeze_panes = "A6"
-    ws.auto_filter.ref = f"A{start_row}:T{max(start_row + 1, total_row - 1)}"
+    ws.auto_filter.ref = f"A{start_row}:U{max(start_row + 1, total_row - 1)}"
 
     summary = wb.create_sheet("Summary")
     _write_summary_sheet(summary, sorted_flags, config, run_range)

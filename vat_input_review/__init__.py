@@ -5,6 +5,7 @@ __all__ = [
     "config",
     "extraction",
     "models",
+    "pastel",
     "profiling",
     "reporting",
     "rules",

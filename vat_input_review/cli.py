@@ -10,6 +10,7 @@ from .auth import FileTokenStore, XeroAuthClient, XeroOAuthConfig
 from .config import OrgReviewConfig, load_org_config
 from .extraction import XeroAccountingClient
 from .io import load_transaction_lines, write_transaction_lines
+from .pastel import load_pastel_export
 from .profiling import build_profiles
 from .reporting import write_reports
 from .rules import evaluate_lines
@@ -37,6 +38,12 @@ def main() -> None:
     fixture.add_argument("--history-json", required=True)
     fixture.add_argument("--review-json", required=True)
     fixture.add_argument("--output-dir", required=True)
+
+    pastel = subparsers.add_parser("run-pastel", help="Run a review from a Sage Pastel CSV/XLSX purchase export.")
+    pastel.add_argument("--config", required=True)
+    pastel.add_argument("--pastel-file", required=True)
+    pastel.add_argument("--history-pastel-file", help="Optional older Pastel export for profile history.")
+    pastel.add_argument("--output-dir", required=True)
 
     xero = subparsers.add_parser("run-xero", help="Extract read-only Xero data and run the review.")
     _add_oauth_args(xero)
@@ -66,6 +73,11 @@ def main() -> None:
         history = _assert_single_tenant(load_transaction_lines(args.history_json), config)
         review = _assert_single_tenant(load_transaction_lines(args.review_json), config)
         _run_review(config, history, review, Path(args.output_dir))
+    elif args.command == "run-pastel":
+        config = load_org_config(args.config)
+        review = load_pastel_export(args.pastel_file, config).lines
+        history = load_pastel_export(args.history_pastel_file, config).lines + review if args.history_pastel_file else review
+        _run_review(config, history, review, Path(args.output_dir), run_range=_infer_run_range(config, review))
     elif args.command == "run-xero":
         config = load_org_config(args.config)
         date_to = date.fromisoformat(args.date_to) if args.date_to else date.today()
@@ -106,6 +118,15 @@ def _run_review(
     print(f"Flagged review items: {len(flags)}")
     print(f"Working paper: {paths.working_paper_xlsx}")
     print(f"Client summary: {paths.client_summary_md}")
+
+
+def _infer_run_range(config: OrgReviewConfig, lines) -> tuple[date, date]:
+    if config.review_range is not None:
+        return config.review_range.date_from, config.review_range.date_to
+    if not lines:
+        today = date.today()
+        return _subtract_years(today, config.lookback_years), today
+    return min(line.transaction_date for line in lines), max(line.transaction_date for line in lines)
 
 
 def _assert_single_tenant(lines, config: OrgReviewConfig):

@@ -20,6 +20,7 @@ def write_transaction_lines(path: str | Path, lines: list[TransactionLine]) -> N
 
 def transaction_line_from_dict(item: dict[str, Any]) -> TransactionLine:
     return TransactionLine(
+        source_system=str(item.get("source_system", "xero")),
         tenant_id=str(item["tenant_id"]),
         organisation_name=item.get("organisation_name"),
         transaction_type=str(item["transaction_type"]),
@@ -48,6 +49,7 @@ def transaction_line_from_dict(item: dict[str, Any]) -> TransactionLine:
 def transaction_line_to_dict(line: TransactionLine) -> dict[str, Any]:
     return {
         "tenant_id": line.tenant_id,
+        "source_system": line.source_system,
         "organisation_name": line.organisation_name,
         "transaction_type": line.transaction_type,
         "transaction_id": line.transaction_id,
