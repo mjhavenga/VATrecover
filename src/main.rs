@@ -52,7 +52,7 @@ fn respond(stream: &mut TcpStream, status: &str, content_type: &str, body: &str)
 }
 
 fn html() -> &'static str {
-    r#"<!doctype html>
+    r##"<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -249,5 +249,5 @@ fn html() -> &'static str {
     </main>
   </div>
 </body>
-</html>"#
+</html>"##
 }
