@@ -107,6 +107,7 @@ fn html() -> &'static str {
     .tab.xero { border-color: var(--xero); color: #087ca3; }
     .tab.sage { border-color: var(--sage); color: #087958; }
     .tab.pastel { border-color: var(--pastel); color: #4b4fa9; }
+    .tab.active { background: #152033; border-color: #152033; color: #fff; }
     .content { padding: 22px 28px 34px; }
     .toolbar {
       display: grid; grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(140px, .7fr)) auto;
@@ -151,6 +152,11 @@ fn html() -> &'static str {
     .dot.pastel { background: var(--pastel); }
     .status { color: var(--muted); font-size: 12px; }
     .linklike { border: 1px solid var(--line); background: #fff; color: var(--ink); }
+    .notice {
+      display: none; margin: -4px 0 16px; padding: 10px 12px; border: 1px solid #b8d7ee;
+      background: #eef8ff; color: #075985; border-radius: 6px; font-size: 13px;
+    }
+    .notice.show { display: block; }
     @media (max-width: 980px) {
       .app { grid-template-columns: 1fr; }
       aside { display: none; }
@@ -171,11 +177,11 @@ fn html() -> &'static str {
     <aside>
       <div class="brand"><div class="mark">V</div><span>VATrecover</span></div>
       <nav>
-        <a class="active" href="#">Review Workbench</a>
-        <a href="#">Client Organisations</a>
-        <a href="#">Connectors</a>
-        <a href="#">Working Papers</a>
-        <a href="#">Configuration</a>
+        <a class="active" href="#" data-view="review">Review Workbench</a>
+        <a href="#" data-view="clients">Client Organisations</a>
+        <a href="#" data-view="connectors">Connectors</a>
+        <a href="#" data-view="papers">Working Papers</a>
+        <a href="#" data-view="config">Configuration</a>
       </nav>
     </aside>
     <main class="main">
@@ -185,9 +191,9 @@ fn html() -> &'static str {
           <div class="subtle">Multi-client review control for Xero, Sage Accounting, and Sage Pastel exports</div>
         </div>
         <div class="source-tabs">
-          <button class="tab xero">Xero</button>
-          <button class="tab sage">Sage</button>
-          <button class="tab pastel">Pastel</button>
+          <button class="tab xero active" type="button" data-source="Xero">Xero</button>
+          <button class="tab sage" type="button" data-source="Sage Accounting">Sage</button>
+          <button class="tab pastel" type="button" data-source="Pastel CSV/XLSX">Pastel</button>
         </div>
       </header>
       <section class="content">
@@ -202,8 +208,9 @@ fn html() -> &'static str {
           </div>
           <div><label for="from">From</label><input id="from" type="date" value="2021-05-28"></div>
           <div><label for="to">To</label><input id="to" type="date" value="2026-05-28"></div>
-          <button type="button">Run Review</button>
+          <button id="run-review" type="button">Run Review</button>
         </form>
+        <div id="notice" class="notice" role="status"></div>
         <div class="metrics">
           <div class="metric recover"><span class="subtle">Potential recovery</span><strong>R 400.00</strong></div>
           <div class="metric"><span class="subtle">Review items</span><strong>2</strong></div>
@@ -214,7 +221,7 @@ fn html() -> &'static str {
           <section class="panel">
             <div class="panel-head">
               <h2>Review Items</h2>
-              <button class="linklike" type="button">Export Working Paper</button>
+              <button id="export-paper" class="linklike" type="button">Export Working Paper</button>
             </div>
             <table>
               <thead><tr><th>Source</th><th>Supplier</th><th>Account</th><th>Reason</th><th class="amount">Under-claim</th><th>Review</th></tr></thead>
@@ -240,14 +247,70 @@ fn html() -> &'static str {
           </section>
           <section class="panel">
             <div class="panel-head"><h2>Connectors</h2></div>
-            <div class="connector"><span class="dot"></span><div><strong>Xero Accounting</strong><div class="status">OAuth 2.0, tenant scoped</div></div><button class="linklike">Manage</button></div>
-            <div class="connector"><span class="dot sage"></span><div><strong>Sage Accounting</strong><div class="status">OAuth 2.0, business scoped</div></div><button class="linklike">Manage</button></div>
-            <div class="connector"><span class="dot pastel"></span><div><strong>Sage Pastel</strong><div class="status">CSV/XLSX import ready</div></div><button class="linklike">Import</button></div>
+            <div class="connector"><span class="dot"></span><div><strong>Xero Accounting</strong><div class="status">OAuth 2.0, tenant scoped</div></div><button class="linklike connector-action" type="button" data-source="Xero">Manage</button></div>
+            <div class="connector"><span class="dot sage"></span><div><strong>Sage Accounting</strong><div class="status">OAuth 2.0, business scoped</div></div><button class="linklike connector-action" type="button" data-source="Sage Accounting">Manage</button></div>
+            <div class="connector"><span class="dot pastel"></span><div><strong>Sage Pastel</strong><div class="status">CSV/XLSX import ready</div></div><button class="linklike connector-action" type="button" data-source="Pastel CSV/XLSX">Import</button></div>
           </section>
         </div>
       </section>
     </main>
   </div>
+  <script>
+    const views = {
+      review: ["Input VAT Recovery Review", "Five-year review workbench for potential under-claimed input VAT."],
+      clients: ["Client Organisations", "Select and isolate each VAT-registered client organisation before running a review."],
+      connectors: ["Connectors", "Manage Xero, Sage Accounting, and Sage Pastel import routes."],
+      papers: ["Working Papers", "Export client-facing Excel working papers and review summaries."],
+      config: ["Configuration", "Set VAT rates, suppressions, confidence thresholds, and apportionment rules."]
+    };
+    const sourceSelect = document.getElementById("source");
+    const notice = document.getElementById("notice");
+    const title = document.querySelector("h1");
+    const subtitle = document.querySelector("header .subtle");
+
+    function showNotice(message) {
+      notice.textContent = message;
+      notice.classList.add("show");
+    }
+
+    function setSource(source) {
+      sourceSelect.value = source;
+      document.querySelectorAll(".source-tabs .tab").forEach((button) => {
+        button.classList.toggle("active", button.dataset.source === source);
+      });
+      showNotice(`${source} selected. Configure the client and date range, then run the VAT review.`);
+    }
+
+    document.querySelectorAll(".source-tabs .tab").forEach((button) => {
+      button.addEventListener("click", () => setSource(button.dataset.source));
+    });
+    sourceSelect.addEventListener("change", () => setSource(sourceSelect.value));
+
+    document.querySelectorAll("nav a").forEach((link) => {
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        document.querySelectorAll("nav a").forEach((item) => item.classList.remove("active"));
+        link.classList.add("active");
+        const view = views[link.dataset.view] || views.review;
+        title.textContent = view[0];
+        subtitle.textContent = view[1];
+        showNotice(`${view[0]} opened.`);
+      });
+    });
+
+    document.getElementById("run-review").addEventListener("click", () => {
+      showNotice(`Review queued for ${sourceSelect.value}. Backend execution will use the tenant-scoped VAT review engine.`);
+    });
+    document.getElementById("export-paper").addEventListener("click", () => {
+      showNotice("Working paper export is available after a review run has completed.");
+    });
+    document.querySelectorAll(".connector-action").forEach((button) => {
+      button.addEventListener("click", () => {
+        setSource(button.dataset.source);
+        showNotice(`${button.dataset.source} connector selected. OAuth/import setup will be connected to this control next.`);
+      });
+    });
+  </script>
 </body>
 </html>"##
 }
