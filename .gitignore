@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+.xero-token*.json
+outputs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
