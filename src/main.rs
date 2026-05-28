@@ -187,8 +187,8 @@ fn html() -> &'static str {
     <main class="main">
       <header>
         <div>
-          <h1>Input VAT Recovery Review</h1>
-          <div class="subtle">Multi-client review control for Xero, Sage Accounting, and Sage Pastel exports</div>
+          <h1>Transaction Export Workbench</h1>
+          <div class="subtle">Connect to accounting systems and export AI-ready purchase transaction packs</div>
         </div>
         <div class="source-tabs">
           <button class="tab xero active" type="button" data-source="Xero">Xero</button>
@@ -212,20 +212,20 @@ fn html() -> &'static str {
           </div>
           <div><label for="from">From</label><input id="from" type="date" value="2021-05-28"></div>
           <div><label for="to">To</label><input id="to" type="date" value="2026-05-28"></div>
-          <button id="run-review" type="button">Run Review</button>
+          <button id="run-review" type="button">Export Transactions</button>
         </form>
         <div id="notice" class="notice" role="status"></div>
         <div class="metrics">
-          <div class="metric recover"><span class="subtle">Potential recovery</span><strong>R 400.00</strong></div>
-          <div class="metric"><span class="subtle">Review items</span><strong>2</strong></div>
+          <div class="metric recover"><span class="subtle">Export formats</span><strong>CSV JSON XLSX</strong></div>
+          <div class="metric"><span class="subtle">Default window</span><strong>5 yrs</strong></div>
           <div class="metric"><span class="subtle">Period coverage</span><strong>5 yrs</strong></div>
-          <div class="metric risk"><span class="subtle">Needs sign-off</span><strong>2</strong></div>
+          <div class="metric risk"><span class="subtle">Write-back</span><strong>Never</strong></div>
         </div>
         <div class="workspace">
           <section class="panel">
             <div class="panel-head">
-              <h2>Review Items</h2>
-              <button id="export-paper" class="linklike" type="button">Export Working Paper</button>
+              <h2>Transaction Export</h2>
+              <button id="export-paper" class="linklike" type="button">Download AI Pack</button>
             </div>
             <table>
               <thead><tr><th>Source</th><th>Supplier</th><th>Account</th><th>Reason</th><th class="amount">Under-claim</th><th>Review</th></tr></thead>
@@ -234,17 +234,17 @@ fn html() -> &'static str {
                   <td><span class="badge">Xero</span></td>
                   <td>VAT Vendor<br><span class="subtle">4123456789</span></td>
                   <td>400 Materials</td>
-                  <td>Supplier VAT number with zero VAT claim</td>
-                  <td class="amount">R 300.00</td>
-                  <td>Open</td>
+                  <td>Normalized purchase line ready for AI review</td>
+                  <td class="amount">R 2,000.00</td>
+                  <td>Ready</td>
                 </tr>
                 <tr>
                   <td><span class="badge">Pastel</span></td>
                   <td>VAT Vendor<br><span class="subtle">4123456789</span></td>
                   <td>400 Materials</td>
-                  <td>Low effective VAT rate against pattern</td>
-                  <td class="amount">R 100.00</td>
-                  <td>Open</td>
+                  <td>Pastel export row mapped to standard schema</td>
+                  <td class="amount">R 1,000.00</td>
+                  <td>Ready</td>
                 </tr>
               </tbody>
             </table>
@@ -261,10 +261,10 @@ fn html() -> &'static str {
   </div>
   <script>
     const views = {
-      review: ["Input VAT Recovery Review", "Five-year review workbench for potential under-claimed input VAT."],
+      review: ["Transaction Export Workbench", "Export AI-ready purchase transaction packs from connected accounting systems."],
       clients: ["Client Organisations", "Select and isolate each VAT-registered client organisation before running a review."],
       connectors: ["Connectors", "Manage Xero, Sage Accounting, and Sage Pastel import routes."],
-      papers: ["Working Papers", "Export client-facing Excel working papers and review summaries."],
+      papers: ["Export Packs", "Download CSV, JSON, and Excel files for AI review."],
       config: ["Configuration", "Set VAT rates, suppressions, confidence thresholds, and apportionment rules."]
     };
     const sourceSelect = document.getElementById("source");
@@ -283,7 +283,7 @@ fn html() -> &'static str {
       document.querySelectorAll(".source-tabs .tab").forEach((button) => {
         button.classList.toggle("active", button.dataset.source === source);
       });
-      showNotice(`${source} selected. Configure the client and date range, then run the VAT review.`);
+      showNotice(`${source} selected. Configure the client and date range, then export transactions.`);
     }
 
     document.querySelectorAll(".source-tabs .tab").forEach((button) => {
@@ -305,10 +305,10 @@ fn html() -> &'static str {
 
     document.getElementById("run-review").addEventListener("click", () => {
       const aiText = aiProvider.value === "Off" ? "AI review is off" : `${aiProvider.value} will enrich the flagged transactions`;
-      showNotice(`Review queued for ${sourceSelect.value}. ${aiText}. Backend execution will use the tenant-scoped VAT review engine.`);
+      showNotice(`Transaction export queued for ${sourceSelect.value}. ${aiText}. Large clients should run in monthly chunks using the stored refresh token.`);
     });
     document.getElementById("export-paper").addEventListener("click", () => {
-      showNotice("Working paper export is available after a review run has completed.");
+      showNotice("AI transaction pack export is available after the extraction job has completed.");
     });
     document.querySelectorAll(".connector-action").forEach((button) => {
       button.addEventListener("click", () => {

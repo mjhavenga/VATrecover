@@ -9,6 +9,8 @@ from pathlib import Path
 from .auth import FileTokenStore, XeroAuthClient, XeroOAuthConfig
 from .ai_review import enrich_flags_with_ai, make_ai_review_client
 from .config import OrgReviewConfig, load_org_config
+from .date_ranges import chunk_date_range, subtract_years
+from .exports import export_transaction_pack
 from .extraction import XeroAccountingClient
 from .io import load_transaction_lines, write_transaction_lines
 from .pastel import load_pastel_export
@@ -59,6 +61,28 @@ def main() -> None:
     xero.add_argument("--dump-normalized-json", action="store_true")
     _add_ai_args(xero)
 
+    export_fixture = subparsers.add_parser("export-fixture", help="Export normalized JSON lines as an AI-ready transaction pack.")
+    export_fixture.add_argument("--config", required=True)
+    export_fixture.add_argument("--review-json", required=True)
+    export_fixture.add_argument("--output-dir", required=True)
+    export_fixture.add_argument("--formats", default="csv,json,xlsx")
+
+    export_pastel = subparsers.add_parser("export-pastel", help="Export a Pastel CSV/XLSX file as an AI-ready transaction pack.")
+    export_pastel.add_argument("--config", required=True)
+    export_pastel.add_argument("--pastel-file", required=True)
+    export_pastel.add_argument("--output-dir", required=True)
+    export_pastel.add_argument("--formats", default="csv,json,xlsx")
+
+    export_xero = subparsers.add_parser("export-xero", help="Headless Xero export using a stored refresh token.")
+    _add_oauth_args(export_xero)
+    export_xero.add_argument("--token-file", required=True)
+    export_xero.add_argument("--config", required=True)
+    export_xero.add_argument("--date-from", help="Export start date. Defaults to date-to minus config.lookback_years.")
+    export_xero.add_argument("--date-to", help="Export end date. Defaults to today.")
+    export_xero.add_argument("--chunk", choices=["monthly", "quarterly", "yearly", "all"], default="monthly")
+    export_xero.add_argument("--output-dir", required=True)
+    export_xero.add_argument("--formats", default="csv,json,xlsx")
+
     args = parser.parse_args()
     if args.command == "auth-url":
         client = XeroAuthClient(_oauth_config(args), FileTokenStore(Path(".xero-token-unused.json")))
@@ -89,6 +113,28 @@ def main() -> None:
             run_range=_infer_run_range(config, review),
             ai_provider=args.ai_provider if args.ai_review else None,
         )
+    elif args.command == "export-fixture":
+        config = load_org_config(args.config)
+        lines = _assert_single_tenant(load_transaction_lines(args.review_json), config)
+        paths = _export_lines(config, lines, Path(args.output_dir), _infer_run_range(config, lines), _parse_formats(args.formats))
+        _print_export_paths(paths)
+    elif args.command == "export-pastel":
+        config = load_org_config(args.config)
+        lines = load_pastel_export(args.pastel_file, config).lines
+        paths = _export_lines(config, lines, Path(args.output_dir), _infer_run_range(config, lines), _parse_formats(args.formats))
+        _print_export_paths(paths)
+    elif args.command == "export-xero":
+        config = load_org_config(args.config)
+        date_to = date.fromisoformat(args.date_to) if args.date_to else date.today()
+        date_from = date.fromisoformat(args.date_from) if args.date_from else subtract_years(date_to, config.lookback_years)
+        auth_client = XeroAuthClient(_oauth_config(args), FileTokenStore(args.token_file))
+        accounting = XeroAccountingClient(auth_client.access_token())
+        formats = _parse_formats(args.formats)
+        for chunk_from, chunk_to in chunk_date_range(date_from, date_to, args.chunk):
+            lines = accounting.extract_for_tenant(config.tenant_id, config, chunk_from, chunk_to).lines
+            paths = _export_lines(config, lines, Path(args.output_dir), (chunk_from, chunk_to), formats)
+            print(f"Exported {len(lines)} lines for {chunk_from.isoformat()} to {chunk_to.isoformat()}")
+            _print_export_paths(paths)
     elif args.command == "run-xero":
         config = load_org_config(args.config)
         date_to = date.fromisoformat(args.date_to) if args.date_to else date.today()
@@ -147,7 +193,7 @@ def _infer_run_range(config: OrgReviewConfig, lines) -> tuple[date, date]:
         return config.review_range.date_from, config.review_range.date_to
     if not lines:
         today = date.today()
-        return _subtract_years(today, config.lookback_years), today
+        return subtract_years(today, config.lookback_years), today
     return min(line.transaction_date for line in lines), max(line.transaction_date for line in lines)
 
 
@@ -174,6 +220,29 @@ def _add_ai_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _export_lines(config: OrgReviewConfig, lines, output_dir: Path, run_range: tuple[date, date], formats: set[str]):
+    _assert_single_tenant(lines, config)
+    return export_transaction_pack(lines, output_dir, config.tenant_id, run_range, formats=formats)
+
+
+def _parse_formats(value: str) -> set[str]:
+    formats = {item.strip().lower() for item in value.split(",") if item.strip()}
+    allowed = {"csv", "json", "xlsx"}
+    unknown = formats - allowed
+    if unknown:
+        raise ValueError(f"Unsupported export format(s): {', '.join(sorted(unknown))}")
+    return formats or allowed
+
+
+def _print_export_paths(paths) -> None:
+    if paths.csv_path:
+        print(f"CSV export: {paths.csv_path}")
+    if paths.json_path:
+        print(f"JSON export: {paths.json_path}")
+    if paths.xlsx_path:
+        print(f"Excel export: {paths.xlsx_path}")
+
+
 def _oauth_config(args) -> XeroOAuthConfig:
     return XeroOAuthConfig(
         client_id=args.client_id,
@@ -183,10 +252,7 @@ def _oauth_config(args) -> XeroOAuthConfig:
 
 
 def _subtract_years(value: date, years: int) -> date:
-    try:
-        return value.replace(year=value.year - years)
-    except ValueError:
-        return value.replace(year=value.year - years, day=28)
+    return subtract_years(value, years)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ __all__ = [
     "auth",
     "ai_review",
     "config",
+    "exports",
     "extraction",
     "models",
     "pastel",
