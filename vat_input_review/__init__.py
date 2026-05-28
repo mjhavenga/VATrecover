@@ -2,6 +2,7 @@
 
 __all__ = [
     "auth",
+    "ai_review",
     "config",
     "extraction",
     "models",

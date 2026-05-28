@@ -12,6 +12,7 @@ Python application for an accounting practice to run a read-only VAT input-tax r
 - Profiles each client's own account/supplier history instead of hardcoding account codes or supplier names. For a five-year full review, the extracted review corpus is also used as the behavioural baseline; optionally pass `--history-from` to add earlier profile history.
 - Imports Sage Pastel/Sage 50 purchase exports in CSV/XLSX form and runs the same VAT review engine.
 - Provides a Render-ready ERP-style web workbench for Xero, Sage Accounting, and Pastel import workflows.
+- Optional AI review enrichment through OpenAI or Anthropic/Claude, returning structured reviewer notes into the working paper.
 - Flags potential under-claimed input VAT as review items only.
 - Suppresses configured blocked input VAT, non-VAT suppliers, exempt/zero-rated accounts, and apportionment accounts.
 - Writes an Excel working paper and a client-facing Markdown summary.
@@ -117,3 +118,26 @@ python -m vat_input_review.cli run-pastel --config examples/org_config.json --pa
 ```
 
 Native Pastel database or backup files are intentionally not parsed directly yet; export to CSV/XLSX first so the review remains transparent and defensible.
+
+## AI review enrichment
+
+The deterministic rule engine remains the source of review flags. AI is optional and adds structured reviewer notes, evidence checks, missing-information prompts, risk level, and claim-readiness scoring. It never turns a review item into an automatic claim.
+
+OpenAI:
+
+```powershell
+$env:OPENAI_API_KEY = "<your key>"
+$env:VATRECOVER_AI_PROVIDER = "openai"
+python -m vat_input_review.cli run-fixture --config examples/org_config.json --history-json examples\history_lines.json --review-json examples\review_lines.json --output-dir outputs --ai-review --ai-provider openai
+```
+
+Anthropic/Claude:
+
+```powershell
+$env:ANTHROPIC_API_KEY = "<your key>"
+$env:VATRECOVER_AI_PROVIDER = "anthropic"
+$env:VATRECOVER_AI_MODEL = "claude-sonnet-4-5"
+python -m vat_input_review.cli run-fixture --config examples/org_config.json --history-json examples\history_lines.json --review-json examples\review_lines.json --output-dir outputs --ai-review --ai-provider anthropic
+```
+
+AI review output is written into additional working-paper columns: AI Risk, AI Action, AI Claim Readiness, AI Reviewer Note, AI Evidence Checks, and AI Missing Information.

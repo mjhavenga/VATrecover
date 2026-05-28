@@ -7,6 +7,7 @@ from datetime import timedelta
 from pathlib import Path
 
 from .auth import FileTokenStore, XeroAuthClient, XeroOAuthConfig
+from .ai_review import enrich_flags_with_ai, make_ai_review_client
 from .config import OrgReviewConfig, load_org_config
 from .extraction import XeroAccountingClient
 from .io import load_transaction_lines, write_transaction_lines
@@ -38,12 +39,14 @@ def main() -> None:
     fixture.add_argument("--history-json", required=True)
     fixture.add_argument("--review-json", required=True)
     fixture.add_argument("--output-dir", required=True)
+    _add_ai_args(fixture)
 
     pastel = subparsers.add_parser("run-pastel", help="Run a review from a Sage Pastel CSV/XLSX purchase export.")
     pastel.add_argument("--config", required=True)
     pastel.add_argument("--pastel-file", required=True)
     pastel.add_argument("--history-pastel-file", help="Optional older Pastel export for profile history.")
     pastel.add_argument("--output-dir", required=True)
+    _add_ai_args(pastel)
 
     xero = subparsers.add_parser("run-xero", help="Extract read-only Xero data and run the review.")
     _add_oauth_args(xero)
@@ -54,6 +57,7 @@ def main() -> None:
     xero.add_argument("--history-from", help="Optional extra profile-history start date before the review window.")
     xero.add_argument("--output-dir", required=True)
     xero.add_argument("--dump-normalized-json", action="store_true")
+    _add_ai_args(xero)
 
     args = parser.parse_args()
     if args.command == "auth-url":
@@ -72,12 +76,19 @@ def main() -> None:
         config = load_org_config(args.config)
         history = _assert_single_tenant(load_transaction_lines(args.history_json), config)
         review = _assert_single_tenant(load_transaction_lines(args.review_json), config)
-        _run_review(config, history, review, Path(args.output_dir))
+        _run_review(config, history, review, Path(args.output_dir), ai_provider=args.ai_provider if args.ai_review else None)
     elif args.command == "run-pastel":
         config = load_org_config(args.config)
         review = load_pastel_export(args.pastel_file, config).lines
         history = load_pastel_export(args.history_pastel_file, config).lines + review if args.history_pastel_file else review
-        _run_review(config, history, review, Path(args.output_dir), run_range=_infer_run_range(config, review))
+        _run_review(
+            config,
+            history,
+            review,
+            Path(args.output_dir),
+            run_range=_infer_run_range(config, review),
+            ai_provider=args.ai_provider if args.ai_review else None,
+        )
     elif args.command == "run-xero":
         config = load_org_config(args.config)
         date_to = date.fromisoformat(args.date_to) if args.date_to else date.today()
@@ -97,7 +108,14 @@ def main() -> None:
             org_dir.mkdir(parents=True, exist_ok=True)
             write_transaction_lines(org_dir / "history_lines.json", history)
             write_transaction_lines(org_dir / "review_lines.json", review)
-        _run_review(config, history, review, output_dir, run_range=(date_from, date_to))
+        _run_review(
+            config,
+            history,
+            review,
+            output_dir,
+            run_range=(date_from, date_to),
+            ai_provider=args.ai_provider if args.ai_review else None,
+        )
 
 
 def _run_review(
@@ -106,6 +124,7 @@ def _run_review(
     review,
     output_dir: Path,
     run_range: tuple[date, date] | None = None,
+    ai_provider: str | None = None,
 ) -> None:
     if run_range is None:
         if config.review_range is None:
@@ -114,7 +133,10 @@ def _run_review(
 
     profiles = build_profiles(history, config)
     flags = evaluate_lines(review, profiles, config)
-    paths = write_reports(flags, config, output_dir, run_range)
+    ai_reviews = None
+    if ai_provider:
+        ai_reviews = enrich_flags_with_ai(flags, make_ai_review_client(ai_provider))
+    paths = write_reports(flags, config, output_dir, run_range, ai_reviews=ai_reviews)
     print(f"Flagged review items: {len(flags)}")
     print(f"Working paper: {paths.working_paper_xlsx}")
     print(f"Client summary: {paths.client_summary_md}")
@@ -140,6 +162,16 @@ def _add_oauth_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--client-id", default=os.getenv("XERO_CLIENT_ID"), required=not os.getenv("XERO_CLIENT_ID"))
     parser.add_argument("--client-secret", default=os.getenv("XERO_CLIENT_SECRET"), required=not os.getenv("XERO_CLIENT_SECRET"))
     parser.add_argument("--redirect-uri", default=os.getenv("XERO_REDIRECT_URI"), required=not os.getenv("XERO_REDIRECT_URI"))
+
+
+def _add_ai_args(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--ai-review", action="store_true", help="Use an AI provider to add structured reviewer notes to flags.")
+    parser.add_argument(
+        "--ai-provider",
+        choices=["openai", "anthropic"],
+        default=os.getenv("VATRECOVER_AI_PROVIDER", "openai"),
+        help="AI provider for structured review enrichment.",
+    )
 
 
 def _oauth_config(args) -> XeroOAuthConfig:

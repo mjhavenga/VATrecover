@@ -7,6 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .config import OrgReviewConfig
+from .ai_review import AIReview, ai_review_to_report_fields
 from .models import ReviewFlag, money
 
 
@@ -16,18 +17,30 @@ class ReportPaths:
     client_summary_md: Path
 
 
-def write_reports(flags: list[ReviewFlag], config: OrgReviewConfig, output_dir: str | Path, run_range: tuple[date, date]) -> ReportPaths:
+def write_reports(
+    flags: list[ReviewFlag],
+    config: OrgReviewConfig,
+    output_dir: str | Path,
+    run_range: tuple[date, date],
+    ai_reviews: dict[str, AIReview] | None = None,
+) -> ReportPaths:
     org_dir = Path(output_dir) / _safe_path_part(config.tenant_id)
     org_dir.mkdir(parents=True, exist_ok=True)
     date_label = f"{run_range[0].isoformat()}_to_{run_range[1].isoformat()}"
     working_paper = org_dir / f"vat_input_review_working_paper_{date_label}.xlsx"
     summary = org_dir / f"vat_input_review_client_summary_{date_label}.md"
-    write_working_paper(flags, config, working_paper, run_range)
-    write_client_summary(flags, config, summary, run_range)
+    write_working_paper(flags, config, working_paper, run_range, ai_reviews=ai_reviews)
+    write_client_summary(flags, config, summary, run_range, ai_reviews=ai_reviews)
     return ReportPaths(working_paper_xlsx=working_paper, client_summary_md=summary)
 
 
-def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: str | Path, run_range: tuple[date, date]) -> None:
+def write_working_paper(
+    flags: list[ReviewFlag],
+    config: OrgReviewConfig,
+    path: str | Path,
+    run_range: tuple[date, date],
+    ai_reviews: dict[str, AIReview] | None = None,
+) -> None:
     try:
         from openpyxl import Workbook
         from openpyxl.styles import Alignment, Font, PatternFill
@@ -68,6 +81,12 @@ def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: 
         "Estimated Under-claim",
         "Reason Code",
         "Confidence",
+        "AI Risk",
+        "AI Action",
+        "AI Claim Readiness",
+        "AI Reviewer Note",
+        "AI Evidence Checks",
+        "AI Missing Information",
         "Audit Trail",
     ]
     start_row = 5
@@ -79,6 +98,7 @@ def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: 
 
     for row_idx, flag in enumerate(sorted_flags, start=start_row + 1):
         line = flag.line
+        ai_fields = ai_review_to_report_fields((ai_reviews or {}).get(line.line_id))
         values = [
             "",
             line.tenant_id,
@@ -100,6 +120,12 @@ def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: 
             float(flag.estimated_underclaim),
             flag.reason_code,
             float(flag.confidence),
+            ai_fields["ai_risk"],
+            ai_fields["ai_action"],
+            float(ai_fields["ai_claim_readiness"]) if ai_fields["ai_claim_readiness"] != "" else "",
+            ai_fields["ai_reviewer_note"],
+            ai_fields["ai_evidence_checks"],
+            ai_fields["ai_missing_information"],
             _audit_trail(flag),
         ]
         for col, value in enumerate(values, start=1):
@@ -115,6 +141,7 @@ def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: 
             ws.cell(row=row, column=col).number_format = '#,##0.00'
     for row in range(start_row + 1, total_row):
         ws.cell(row=row, column=20).number_format = "0%"
+        ws.cell(row=row, column=23).number_format = "0%"
 
     widths = {
         1: 14,
@@ -132,19 +159,31 @@ def write_working_paper(flags: list[ReviewFlag], config: OrgReviewConfig, path: 
         14: 36,
         18: 20,
         19: 34,
-        21: 60,
+        21: 14,
+        22: 22,
+        23: 18,
+        24: 42,
+        25: 42,
+        26: 42,
+        27: 60,
     }
     for col in range(1, len(headers) + 1):
         ws.column_dimensions[get_column_letter(col)].width = widths.get(col, 16)
     ws.freeze_panes = "A6"
-    ws.auto_filter.ref = f"A{start_row}:U{max(start_row + 1, total_row - 1)}"
+    ws.auto_filter.ref = f"A{start_row}:AA{max(start_row + 1, total_row - 1)}"
 
     summary = wb.create_sheet("Summary")
     _write_summary_sheet(summary, sorted_flags, config, run_range)
     wb.save(path)
 
 
-def write_client_summary(flags: list[ReviewFlag], config: OrgReviewConfig, path: str | Path, run_range: tuple[date, date]) -> None:
+def write_client_summary(
+    flags: list[ReviewFlag],
+    config: OrgReviewConfig,
+    path: str | Path,
+    run_range: tuple[date, date],
+    ai_reviews: dict[str, AIReview] | None = None,
+) -> None:
     total = sum((flag.estimated_underclaim for flag in flags), money("0"))
     by_reason = _breakdown(flags, lambda flag: flag.reason_code)
     by_period = _breakdown(flags, lambda flag: flag.line.vat_period)
@@ -159,6 +198,7 @@ def write_client_summary(flags: list[ReviewFlag], config: OrgReviewConfig, path:
         "",
         f"Total potential recovery: ZAR {total:,.2f}",
         f"Review item count: {len(flags)}",
+        f"AI-reviewed item count: {len(ai_reviews or {})}",
         "",
         "## Breakdown by reason",
         "",

@@ -110,7 +110,7 @@ fn html() -> &'static str {
     .tab.active { background: #152033; border-color: #152033; color: #fff; }
     .content { padding: 22px 28px 34px; }
     .toolbar {
-      display: grid; grid-template-columns: minmax(240px, 1.4fr) repeat(3, minmax(140px, .7fr)) auto;
+      display: grid; grid-template-columns: minmax(220px, 1.4fr) repeat(4, minmax(130px, .7fr)) auto;
       gap: 12px; align-items: end; background: var(--panel); border: 1px solid var(--line);
       border-radius: 8px; padding: 16px; margin-bottom: 16px;
     }
@@ -206,6 +206,10 @@ fn html() -> &'static str {
             <label for="source">Source</label>
             <select id="source"><option>Xero</option><option>Sage Accounting</option><option>Pastel CSV/XLSX</option></select>
           </div>
+          <div>
+            <label for="ai-provider">AI Review</label>
+            <select id="ai-provider"><option>Off</option><option>OpenAI</option><option>Anthropic Claude</option></select>
+          </div>
           <div><label for="from">From</label><input id="from" type="date" value="2021-05-28"></div>
           <div><label for="to">To</label><input id="to" type="date" value="2026-05-28"></div>
           <button id="run-review" type="button">Run Review</button>
@@ -264,6 +268,7 @@ fn html() -> &'static str {
       config: ["Configuration", "Set VAT rates, suppressions, confidence thresholds, and apportionment rules."]
     };
     const sourceSelect = document.getElementById("source");
+    const aiProvider = document.getElementById("ai-provider");
     const notice = document.getElementById("notice");
     const title = document.querySelector("h1");
     const subtitle = document.querySelector("header .subtle");
@@ -299,7 +304,8 @@ fn html() -> &'static str {
     });
 
     document.getElementById("run-review").addEventListener("click", () => {
-      showNotice(`Review queued for ${sourceSelect.value}. Backend execution will use the tenant-scoped VAT review engine.`);
+      const aiText = aiProvider.value === "Off" ? "AI review is off" : `${aiProvider.value} will enrich the flagged transactions`;
+      showNotice(`Review queued for ${sourceSelect.value}. ${aiText}. Backend execution will use the tenant-scoped VAT review engine.`);
     });
     document.getElementById("export-paper").addEventListener("click", () => {
       showNotice("Working paper export is available after a review run has completed.");
